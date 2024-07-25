@@ -9,7 +9,7 @@ from requests.adapters import HTTPAdapter
 from api import formatted_output
 from api.cipher import AESCipher
 from api.logger import logger
-from api.cookies import save_cookies, use_cookies
+from api.cookies import save_cookies, use_cookies, start_session
 from api.process import show_progress
 from api.config import GlobalConst as gc
 from api.decode import (decode_course_list,
@@ -26,17 +26,18 @@ def get_random_seconds():
     return random.randint(30, 90)
 
 
+
 def init_session(isVideo: bool = False, isAudio: bool = False):
-    _session = requests.session()
-    _session.mount('http://', HTTPAdapter(max_retries=3))
-    _session.mount('https://', HTTPAdapter(max_retries=3))
+    _session = start_session('s')
+    _session.session.mount('http://', HTTPAdapter(max_retries=3))
+    _session.session.mount('https://', HTTPAdapter(max_retries=3))
     if isVideo:
-        _session.headers = gc.VIDEO_HEADERS
+        _session.session.headers = gc.VIDEO_HEADERS
     elif isAudio:
-        _session.headers = gc.AUDIO_HEADERS
+        _session.session.headers = gc.AUDIO_HEADERS
     else:
-        _session.headers = gc.HEADERS
-    _session.cookies.update(use_cookies())
+        _session.session.headers = gc.HEADERS
+    _session.session.cookies.update(use_cookies())
     return _session
 
 
@@ -56,7 +57,7 @@ class Chaoxing:
         self.cipher = AESCipher()
 
     def login(self):
-        _session = requests.session()
+        _session = WebPage(mode='s')
         _url = "https://passport2.chaoxing.com/fanyalogin"
         _data = {"fid": "-1",
                     "uname": self.cipher.encrypt(self.account.username),
@@ -70,20 +71,20 @@ class Chaoxing:
                 }
         logger.trace("正在尝试登录...")
         resp = _session.post(_url, headers=gc.HEADERS, data=_data)
-        if resp and resp.json()["status"] == True:
+        if resp and _session.json["status"] == True:
             save_cookies(_session)
             logger.info("登录成功...")
             return {"status": True, "msg": "登录成功"}
         else:
-            return {"status": False, "msg": str(resp.json()["msg2"])}
+            return {"status": False, "msg": str(_session.json["msg2"])}
 
     def get_fid(self):
         _session = init_session()
-        return _session.cookies.get("fid")
+        return _session.session.cookies.get("fid")
 
     def get_uid(self):
         _session = init_session()
-        return _session.cookies.get("_uid")
+        return _session.session.cookies.get("_uid")
 
     def get_course_list(self):
         _session = init_session()
@@ -96,13 +97,13 @@ class Chaoxing:
         }
         logger.trace("正在读取所有的课程列表...")
         _resp = _session.post(_url, data=_data)
-        # logger.trace(f"原始课程列表内容:\n{_resp.text}")
+        # logger.trace(f"原始课程列表内容:\n{_session.text}")
         logger.info("课程列表读取完毕...")
-        course_list = decode_course_list(_resp.text)
+        course_list = decode_course_list(_session.response.text)
 
         _interaction_url = "https://mooc2-ans.chaoxing.com/mooc2-ans/visit/interaction"
         _interaction_resp = _session.get(_interaction_url)
-        course_folder = decode_course_folder(_interaction_resp.text)
+        course_folder = decode_course_folder(_session.response.text)
         for folder in course_folder:
             _data = {
                 "courseType": 1,
@@ -111,7 +112,7 @@ class Chaoxing:
                 "superstarClass": 0
             }
             _resp = _session.post(_url, data=_data)
-            course_list += decode_course_list(_resp.text)
+            course_list += decode_course_list(_session.response.text)
         return course_list
 
     def get_course_point(self, _courseid, _clazzid, _cpi):
@@ -121,7 +122,7 @@ class Chaoxing:
         _resp = _session.get(_url)
         # logger.trace(f"原始章节列表内容:\n{_resp.text}")
         logger.info("课程章节读取成功...")
-        return decode_course_point(_resp.text)
+        return decode_course_point(_session.response.text)
 
     def get_job_list(self, _clazzid, _courseid, _cpi, _knowledgeid):
         _session = init_session()
@@ -129,7 +130,7 @@ class Chaoxing:
             _url = f"https://mooc1.chaoxing.com/mooc-ans/knowledge/cards?clazzid={_clazzid}&courseid={_courseid}&knowledgeid={_knowledgeid}&num={_possible_num}&ut=s&cpi={_cpi}&v=20160407-3&mooc2=1"
             logger.trace("开始读取章节所有任务点...")
             _resp = _session.get(_url)
-            _job_list, _job_info = decode_course_card(_resp.text)
+            _job_list, _job_info = decode_course_card(_session.response.text)
             if _job_list and len(_job_list) != 0:
                 break
             else:
@@ -168,13 +169,13 @@ class Chaoxing:
                     f"dtype={_type}&"
                     f"_t={get_timestamp()}")
             resp = _session.get(_url)
-            if resp.status_code == 200:
+            if _session.response.status_code == 200:
                 _success = True
                 break   # 如果返回为200正常，则跳出循环
-            elif resp.status_code == 403:
+            elif _session.response.status_code == 403:
                 continue    # 如果出现403无权限报错，则继续尝试不同的rt参数
         if _success:
-            return resp.json()
+            return _session.json
         else:
             # 若出现两个rt参数都返回403的情况，则跳过当前任务
             logger.warning("出现403报错，尝试修复无效，正在跳过当前任务点...")
@@ -185,9 +186,10 @@ class Chaoxing:
             _session = init_session(isVideo=True)
         else:
             _session = init_session(isAudio=True)
-        _session.headers.update()
+        _session.session.headers.update()
         _info_url = f"https://mooc1.chaoxing.com/ananas/status/{_job['objectid']}?k={self.get_fid()}&flag=normal"
-        _video_info = _session.get(_info_url).json()
+        _video_info = _session.get(_info_url)
+        _video_info = _session.json
         if _video_info["status"] == "success":
             _dtoken = _video_info["dtoken"]
             _duration = _video_info["duration"]
@@ -213,6 +215,13 @@ class Chaoxing:
                 show_progress(_job['name'], _playingTime, _wait_time, _duration, _speed)
                 _playingTime += _wait_time
             logger.info(f"\n任务完成:{_job['name']}")
+
+    def study_video_d(self, _course, _job, _job_info, _speed: float = 1, _type: str = "Video"):
+        if _type == "Video":
+            _session = init_session(isVideo=True)
+        else:
+            _session = init_session(isAudio=True)
+        _session.cookies_to_browser()
 
     def study_document(self, _course, _job):
         _session = init_session()

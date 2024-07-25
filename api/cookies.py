@@ -7,7 +7,7 @@ from api.config import GlobalConst as gc
 
 def save_cookies(_session):
     with open(gc.COOKIES_PATH, 'wb') as f:
-        pickle.dump(_session.cookies, f)
+        pickle.dump(_session.response.cookies, f)
 
 
 def use_cookies():

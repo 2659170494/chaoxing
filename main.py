@@ -29,7 +29,7 @@ if __name__ == '__main__':
     username, password, course_list, speed = init_config()
     # 强行限制倍速最大为2倍速
     speed = 2 if speed > 2 else speed
-    if (not username) or (not password):
+    """if (not username) or (not password):
         username = input("请输入你的手机号，按回车确认\n手机号:")
         password = input("请输入你的密码，按回车确认\n密码:")
     account = Account(username, password)
@@ -38,8 +38,10 @@ if __name__ == '__main__':
     # 检查当前登录状态，并检查账号密码
     _login_state = chaoxing.login()
     if not _login_state["status"]:
-        raise LoginError(_login_state["msg"])
+        raise LoginError(_login_state["msg"])"""
+    chaoxing = Chaoxing()
     # 获取所有的课程列表
+    raise LoginError("")
     all_course = chaoxing.get_course_list()
     course_task = []
     # 手动输入要学习的课程ID列表
