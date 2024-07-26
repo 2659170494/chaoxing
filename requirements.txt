@@ -4,6 +4,6 @@ beautifulsoup4
 lxml
 argparse
 loguru
-flask
-celery
+#flask
+#celery
 DrissionPage

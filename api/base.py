@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import re
-import requests
+from DrissionPage import WebPage, ChromiumOptions, SessionOptions
 import time
 import random
 from hashlib import md5
@@ -9,14 +9,16 @@ from requests.adapters import HTTPAdapter
 from api import formatted_output
 from api.cipher import AESCipher
 from api.logger import logger
-from api.cookies import save_cookies, use_cookies, start_session
+from api.cookies import save_cookies, use_cookies
 from api.process import show_progress
 from api.config import GlobalConst as gc
+from api.config import start_session
 from api.decode import (decode_course_list,
                         decode_course_point,
                         decode_course_card,
                         decode_course_folder)
 
+debug = gc.debug
 
 def get_timestamp():
     return str(int(time.time() * 1000))
@@ -28,7 +30,7 @@ def get_random_seconds():
 
 
 def init_session(isVideo: bool = False, isAudio: bool = False):
-    _session = start_session('s')
+    _session = start_session('s',chromium_options=ChromiumOptions().headless())
     _session.session.mount('http://', HTTPAdapter(max_retries=3))
     _session.session.mount('https://', HTTPAdapter(max_retries=3))
     if isVideo:
@@ -57,7 +59,7 @@ class Chaoxing:
         self.cipher = AESCipher()
 
     def login(self):
-        _session = WebPage(mode='s')
+        _session = WebPage(mode='s',chromium_options=ChromiumOptions().headless())
         _url = "https://passport2.chaoxing.com/fanyalogin"
         _data = {"fid": "-1",
                     "uname": self.cipher.encrypt(self.account.username),
@@ -118,6 +120,7 @@ class Chaoxing:
     def get_course_point(self, _courseid, _clazzid, _cpi):
         _session = init_session()
         _url = f"https://mooc2-ans.chaoxing.com/mooc2-ans/mycourse/studentcourse?courseid={_courseid}&clazzid={_clazzid}&cpi={_cpi}&ut=s"
+        print(f'[base]_url:{_url}') if debug else None
         logger.trace("开始读取课程所有章节...")
         _resp = _session.get(_url)
         # logger.trace(f"原始章节列表内容:\n{_resp.text}")

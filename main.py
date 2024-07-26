@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 import argparse
 import configparser
+import os
 from api.logger import logger
 from api.base import Chaoxing, Account
 from api.exceptions import LoginError, FormatError, JSONDecodeError
+from api.config import GlobalConst as gc
+
+debug = gc.debug
 
 def init_config():
     parser = argparse.ArgumentParser(description='Samueli924/chaoxing')  # 命令行传参
@@ -29,19 +33,33 @@ if __name__ == '__main__':
     username, password, course_list, speed = init_config()
     # 强行限制倍速最大为2倍速
     speed = 2 if speed > 2 else speed
-    """if (not username) or (not password):
-        username = input("请输入你的手机号，按回车确认\n手机号:")
-        password = input("请输入你的密码，按回车确认\n密码:")
-    account = Account(username, password)
-    # 实例化超星API
-    chaoxing = Chaoxing(account=account)
-    # 检查当前登录状态，并检查账号密码
-    _login_state = chaoxing.login()
-    if not _login_state["status"]:
-        raise LoginError(_login_state["msg"])"""
-    chaoxing = Chaoxing()
+    # 若有账号密码输入则抛弃cookies并重新登陆（需要完善下逻辑）
+    if username or password:
+        # if os.path.lexists(gc.COOKIES_PATH) and os.path.getsize(gc.COOKIES_PATH):
+        #     if username and password:
+        #         input("检测到终端目录有cookies.txt存在，若继续登录将会清除该cookies。\n请按回车键继续。。。")
+        #     else:
+        #         print("检测到终端目录有cookies.txt存在，若继续登录将会清除该cookies。")
+        chaoxing = "need_login"
+    #cookies存在则直接使用
+    elif os.path.lexists(gc.COOKIES_PATH) and os.path.getsize(gc.COOKIES_PATH):
+        chaoxing = Chaoxing()
+    #什么都没用默认当工具启动
+    else:
+        chaoxing = "need_login"
+    if chaoxing == "need_login":
+        if (not username) :
+            username = input("请输入你的手机号，按回车确认\n手机号:")
+        if (not password) :
+            password = input("请输入你的密码，按回车确认\n密码:")
+        account = Account(username, password)
+        # 实例化超星API
+        chaoxing = Chaoxing(account=account)
+        # 检查当前登录状态，并检查账号密码
+        _login_state = chaoxing.login()
+        if not _login_state["status"]:
+            raise LoginError(_login_state["msg"])
     # 获取所有的课程列表
-    raise LoginError("")
     all_course = chaoxing.get_course_list()
     course_task = []
     # 手动输入要学习的课程ID列表
@@ -81,13 +99,23 @@ if __name__ == '__main__':
                     # 超星的接口没有返回当前任务是否为Audio音频任务
                     isAudio = False
                     try:
-                        chaoxing.study_video(course, job, job_info, _speed=speed, _type="Video")
+                        # 若调试启动，以chromedriver方式挂课
+                        if debug:
+                            chaoxing.study_video_d(course, job, job_info, _speed=speed, _type="Video")
+                        # 否则以协议挂课
+                        else:
+                            chaoxing.study_video(course, job, job_info, _speed=speed, _type="Video")
                     except JSONDecodeError as e:
                         logger.warning("当前任务非视频任务，正在尝试音频任务解码")
                         isAudio = True
                     if isAudio:
                         try:
-                            chaoxing.study_video(course, job, job_info, _speed=speed, _type="Audio")
+                            #同上，调试开启chromedriver启动
+                            if debug:
+                                chaoxing.study_video_d(course, job, job_info, _speed=speed, _type="Audio")
+                            #同上上，调试关闭协议启动
+                            else:
+                                chaoxing.study_video(course, job, job_info, _speed=speed, _type="Audio")
                         except JSONDecodeError as e:
                             logger.warning(f"出现异常任务 -> 任务章节: {course['title']} 任务ID: {job['jobid']}, 已跳过")
                 # 文档任务
