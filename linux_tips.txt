@@ -1,0 +1,9 @@
+wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+sudo apt install ./google-chrome-stable_current_amd64.deb -y
+#https://notes.dt.in.th/CodespacesGoogleChrome
+wget http://archive.ubuntu.com/ubuntu/pool/main/libu/libu2f-host/libu2f-udev_1.1.4-1_all.deb
+sudo dpkg -i libu2f-udev_1.1.4-1_all.deb
+sudo apt update && sudo apt install fonts-liberation
+sudo apt --fix-broken install
+#https://stackoverflow.com/questions/75251315/dependency-issue-installing-google-chrome-stable-through-ubuntu-docker
+#https://bbs.deepin.org/post/213051
