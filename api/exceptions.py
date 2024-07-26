@@ -17,3 +17,8 @@ class LoginError(BaseException):
 
 class FormatError(Exception):
     pass
+
+class DriverNotFoundError(Exception):
+    def __init__(self, _msg: str = None):
+        if _msg:
+            logger.error(_msg)

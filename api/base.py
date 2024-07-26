@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 import re
 from DrissionPage import WebPage, ChromiumOptions, SessionOptions
+from api.exceptions import LoginError, FormatError, JSONDecodeError, DriverNotFoundError
 import time
 import random
+import requests
+import json
 from hashlib import md5
 from requests.adapters import HTTPAdapter
 
@@ -28,18 +31,31 @@ def get_random_seconds():
     return random.randint(30, 90)
 
 
-
-def init_session(isVideo: bool = False, isAudio: bool = False):
-    _session = start_session('s',chromium_options=ChromiumOptions().headless())
-    _session.session.mount('http://', HTTPAdapter(max_retries=3))
-    _session.session.mount('https://', HTTPAdapter(max_retries=3))
-    if isVideo:
-        _session.session.headers = gc.VIDEO_HEADERS
-    elif isAudio:
-        _session.session.headers = gc.AUDIO_HEADERS
+def init_session(isVideo: bool = False, isAudio: bool = False, driver = str):
+    if driver == "drissionPage":
+        _session = start_session('s',chromium_options=ChromiumOptions().headless())
+        _session.session.mount('http://', HTTPAdapter(max_retries=3))
+        _session.session.mount('https://', HTTPAdapter(max_retries=3))
+        if isVideo:
+            _session.set.headers(gc.VIDEO_HEADERS)
+        elif isAudio:
+            _session.set.headers(gc.AUDIO_HEADERS)
+        else:
+            _session.set.headers(gc.HEADERS)
+        _session.set.cookies(use_cookies())
+    elif driver == "requests":
+        _session = requests.session()
+        _session.mount('http://', HTTPAdapter(max_retries=3))
+        _session.mount('https://', HTTPAdapter(max_retries=3))
+        if isVideo:
+            _session.headers = gc.VIDEO_HEADERS
+        elif isAudio:
+            _session.headers = gc.AUDIO_HEADERS
+        else:
+            _session.headers = gc.HEADERS
+        _session.cookies.update(use_cookies())
     else:
-        _session.session.headers = gc.HEADERS
-    _session.session.cookies.update(use_cookies())
+        raise DriverNotFoundError("尝试选择驱动器错误")
     return _session
 
 
@@ -54,12 +70,21 @@ class Account:
 
 
 class Chaoxing:
-    def __init__(self, account: Account = None):
+    def __init__(self, account: Account = None, driver = int):
+        if driver == 0:
+            self.driver = "requests"
+        elif driver == 1:
+            self.driver = "drissionPage"
+        else:
+            raise DriverNotFoundError("指定的驱动器编号错误")
         self.account = account
         self.cipher = AESCipher()
 
     def login(self):
-        _session = WebPage(mode='s',chromium_options=ChromiumOptions().headless())
+        if self.driver == "drissionPage":
+            _session = WebPage(mode='s',chromium_options=ChromiumOptions().headless())
+        elif self.driver == "requests":
+            _session = requests.session()
         _url = "https://passport2.chaoxing.com/fanyalogin"
         _data = {"fid": "-1",
                     "uname": self.cipher.encrypt(self.account.username),
@@ -73,23 +98,31 @@ class Chaoxing:
                 }
         logger.trace("正在尝试登录...")
         resp = _session.post(_url, headers=gc.HEADERS, data=_data)
-        if resp and _session.json["status"] == True:
+        if self.driver == "drissionPage":
+            resp = _session.json
+        else:
+            resp = json.loads(resp.text)
+        if resp["status"] == True:
             save_cookies(_session)
             logger.info("登录成功...")
             return {"status": True, "msg": "登录成功"}
         else:
-            return {"status": False, "msg": str(_session.json["msg2"])}
+            return {"status": False, "msg": str(resp["msg2"])}
 
     def get_fid(self):
-        _session = init_session()
-        return _session.session.cookies.get("fid")
+        _session = init_session(driver=self.driver)
+        if self.driver == "drissionPage":
+            return _session.session.cookies.get("fid")
+        return _session.cookies.get("fid")
 
     def get_uid(self):
-        _session = init_session()
-        return _session.session.cookies.get("_uid")
+        _session = init_session(driver=self.driver)
+        if self.driver == "drissionPage":
+            return _session.session.cookies.get("fid")
+        return _session.cookies.get("_uid")
 
     def get_course_list(self):
-        _session = init_session()
+        _session = init_session(driver=self.driver)
         _url = "https://mooc2-ans.chaoxing.com/mooc2-ans/visit/courselistdata"
         _data = {
             "courseType": 1,
@@ -99,13 +132,17 @@ class Chaoxing:
         }
         logger.trace("正在读取所有的课程列表...")
         _resp = _session.post(_url, data=_data)
+        if self.driver == "drissionPage":
+            _resp = _session.response
         # logger.trace(f"原始课程列表内容:\n{_session.text}")
         logger.info("课程列表读取完毕...")
-        course_list = decode_course_list(_session.response.text)
+        course_list = decode_course_list(_resp.text)
 
         _interaction_url = "https://mooc2-ans.chaoxing.com/mooc2-ans/visit/interaction"
         _interaction_resp = _session.get(_interaction_url)
-        course_folder = decode_course_folder(_session.response.text)
+        if self.driver == "drissionPage":
+            _interaction_resp = _session.response
+        course_folder = decode_course_folder(_interaction_resp.text)
         for folder in course_folder:
             _data = {
                 "courseType": 1,
@@ -114,26 +151,32 @@ class Chaoxing:
                 "superstarClass": 0
             }
             _resp = _session.post(_url, data=_data)
-            course_list += decode_course_list(_session.response.text)
+            if self.driver == "drissionPage":
+                _resp = _session.response
+            course_list += decode_course_list(_resp.text)
         return course_list
 
     def get_course_point(self, _courseid, _clazzid, _cpi):
-        _session = init_session()
+        _session = init_session(driver=self.driver)
         _url = f"https://mooc2-ans.chaoxing.com/mooc2-ans/mycourse/studentcourse?courseid={_courseid}&clazzid={_clazzid}&cpi={_cpi}&ut=s"
-        print(f'[base]_url:{_url}') if debug else None
+        logger.trace(f'_url:{_url}') if debug else None
         logger.trace("开始读取课程所有章节...")
         _resp = _session.get(_url)
+        if self.driver == "drissionPage":
+            _resp = _session.response
         # logger.trace(f"原始章节列表内容:\n{_resp.text}")
         logger.info("课程章节读取成功...")
-        return decode_course_point(_session.response.text)
+        return decode_course_point(_resp.text)
 
     def get_job_list(self, _clazzid, _courseid, _cpi, _knowledgeid):
-        _session = init_session()
+        _session = init_session(driver=self.driver)
         for _possible_num in ["0", "1"]:
             _url = f"https://mooc1.chaoxing.com/mooc-ans/knowledge/cards?clazzid={_clazzid}&courseid={_courseid}&knowledgeid={_knowledgeid}&num={_possible_num}&ut=s&cpi={_cpi}&v=20160407-3&mooc2=1"
             logger.trace("开始读取章节所有任务点...")
             _resp = _session.get(_url)
-            _job_list, _job_info = decode_course_card(_session.response.text)
+            if self.driver == "drissionPage":
+                _resp = _session.response
+            _job_list, _job_info = decode_course_card(_resp.text)
             if _job_list and len(_job_list) != 0:
                 break
             else:
@@ -172,13 +215,17 @@ class Chaoxing:
                     f"dtype={_type}&"
                     f"_t={get_timestamp()}")
             resp = _session.get(_url)
-            if _session.response.status_code == 200:
+            if self.driver == "drissionPage":
+                resp = _session.response
+            if resp.status_code == 200:
                 _success = True
                 break   # 如果返回为200正常，则跳出循环
-            elif _session.response.status_code == 403:
+            elif resp.status_code == 403:
                 continue    # 如果出现403无权限报错，则继续尝试不同的rt参数
         if _success:
-            return _session.json
+            if self.driver == "drissionPage":
+                return resp.json
+            return json.loads(resp.text)
         else:
             # 若出现两个rt参数都返回403的情况，则跳过当前任务
             logger.warning("出现403报错，尝试修复无效，正在跳过当前任务点...")
@@ -186,13 +233,20 @@ class Chaoxing:
 
     def study_video(self, _course, _job, _job_info, _speed: float = 1, _type: str = "Video"):
         if _type == "Video":
-            _session = init_session(isVideo=True)
+            _session = init_session(driver=self.driver,isVideo=True)
         else:
-            _session = init_session(isAudio=True)
-        _session.session.headers.update()
+            _session = init_session(driver=self.driver,isAudio=True)
+        if self.driver == "drissionPage":
+            resp_session = _session.session
+        else:
+            resp_session = _session
+        resp_session.headers.update()
         _info_url = f"https://mooc1.chaoxing.com/ananas/status/{_job['objectid']}?k={self.get_fid()}&flag=normal"
         _video_info = _session.get(_info_url)
-        _video_info = _session.json
+        if self.driver == "drissionPage":
+            _video_info = _session.json
+        else:
+            _video_info = json.loads(_video_info.text)
         if _video_info["status"] == "success":
             _dtoken = _video_info["dtoken"]
             _duration = _video_info["duration"]
@@ -221,12 +275,12 @@ class Chaoxing:
 
     def study_video_d(self, _course, _job, _job_info, _speed: float = 1, _type: str = "Video"):
         if _type == "Video":
-            _session = init_session(isVideo=True)
+            _session = init_session(driver=self.driver,isVideo=True)
         else:
-            _session = init_session(isAudio=True)
+            _session = init_session(driver=self.driver,isAudio=True)
         _session.cookies_to_browser()
 
     def study_document(self, _course, _job):
-        _session = init_session()
+        _session = init_session(driver=self.driver)
         _url = f"https://mooc1.chaoxing.com/ananas/job/document?jobid={_job['jobid']}&knowledgeid={re.findall('nodeId_(.*?)-', _job['otherinfo'])[0]}&courseid={_course['courseId']}&clazzid={_course['clazzId']}&jtoken={_job['jtoken']}&_dc={get_timestamp()}"
         _resp = _session.get(_url)

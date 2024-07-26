@@ -50,12 +50,12 @@ def decode_course_point(_text):
     _course_point = {}
     _point_list = []
     _raw_points = _soup.select("div.chapter_item")
-    #print(f'[decode]_raw_points:{_raw_points}') if debug else None
+    #logger.trace(f'_raw_points:{_raw_points}') if debug else None
     for _point in _raw_points:
-        print(f'[decode]_point.attrs:{_point.attrs}') if debug else None
+        logger.trace(f'_point.attrs:{_point.attrs}') if debug else None
         if (not "id" in _point.attrs) or (not "title" in _point.attrs):
-            #print(f'[decode]{_point.attrs} id not has id or title') if debug else None
-            print(f'[decode]_point.text:{_point.text}') if debug else None
+            #logger.trace(f'{_point.attrs} id not has id or title') if debug else None
+            logger.trace(f'_point.text:{_point.text}') if debug else None
             continue
         _point_detail = {}
         _point_detail["id"] = re.findall("^cur(\d{1,20})$", _point.attrs["id"])[0]
@@ -65,7 +65,7 @@ def decode_course_point(_text):
             _point_detail["jobCount"] = _point.select_one("input.knowledgeJobCount").attrs["value"]
         _point_list.append(_point_detail)
     _course_point["points"] = _point_list
-    print(f'[decode]_course_point:{_course_point}') if debug else None
+    logger.trace(f'_course_point:{_course_point}') if debug else None
     return _course_point
 
 
@@ -79,7 +79,7 @@ def decode_course_card(_text: str):
     _cards = json.loads("{" + _temp + "}")
     _job_info = {}
     _job_list = []
-    print(f'[decode]_cards:{_cards}') if debug else None
+    logger.trace(f'_cards:{_cards}') if debug else None
     if _cards:
         _job_info = {}
         _job_info["ktoken"] = _cards["defaults"]["ktoken"]

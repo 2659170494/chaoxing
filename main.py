@@ -4,10 +4,13 @@ import configparser
 import os
 from api.logger import logger
 from api.base import Chaoxing, Account
-from api.exceptions import LoginError, FormatError, JSONDecodeError
+
+from api.exceptions import LoginError, FormatError, JSONDecodeError, DriverNotFoundError
 from api.config import GlobalConst as gc
 
 debug = gc.debug
+default_driver = 1
+default_d_function = 0
 
 def init_config():
     parser = argparse.ArgumentParser(description='Samueli924/chaoxing')  # 命令行传参
@@ -16,6 +19,8 @@ def init_config():
     parser.add_argument("-p", "--password", type=str, default=None, help="登录密码")
     parser.add_argument("-l", "--list", type=str, default=None, help="要学习的课程ID列表")
     parser.add_argument("-s", "--speed", type=int, default=1, help="视频播放倍速(默认1，最大2)")
+    parser.add_argument("-cdc","--chromedriver",type=str,default="",help="指定Chromedriver路径位置")
+    parser.add_argument("-drv","--driver",type=int,default=default_driver,help="指定使用哪个驱动器(默认0=requests，1=DrissionPage)")
     args = parser.parse_args()
     if args.config:
         config = configparser.ConfigParser()
@@ -23,17 +28,22 @@ def init_config():
         return (config.get("common", "username"),
                 config.get("common", "password"),
                 str(config.get("common", "course_list")).split(",") if config.get("common", "course_list") else None,
-                int(config.get("common", "speed")))
+                int(config.get("common", "speed")),
+                str(config.get("common","chromedriver")) if config.get("common","chromedriver") else "",
+                int(config.get("common","driver")) if config.get("common","driver") else default_driver)
     else:
-        return (args.username, args.password, args.list.split(",") if args.list else None, int(args.speed) if args.speed else 1)
+        return (args.username, args.password, args.list.split(",") if args.list else None, int(args.speed) if args.speed else 1, args.chromedriver if args.chromedriver else "", int(args.driver) if args.driver else default_driver)
 
 
 if __name__ == '__main__':
     # 初始化登录信息
-    username, password, course_list, speed = init_config()
+    username, password, course_list, speed, cdc_path, driver= init_config()
     # 强行限制倍速最大为2倍速
     speed = 2 if speed > 2 else speed
     # 若有账号密码输入则抛弃cookies并重新登陆（需要完善下逻辑）
+    if cdc_path:
+        from DrissionPage import ChromiumOptions
+        ChromiumOptions().set_browser_path(cdc_path).save()
     if username or password:
         # if os.path.lexists(gc.COOKIES_PATH) and os.path.getsize(gc.COOKIES_PATH):
         #     if username and password:
@@ -43,7 +53,7 @@ if __name__ == '__main__':
         chaoxing = "need_login"
     #cookies存在则直接使用
     elif os.path.lexists(gc.COOKIES_PATH) and os.path.getsize(gc.COOKIES_PATH):
-        chaoxing = Chaoxing()
+        chaoxing = Chaoxing(driver=driver)
     #什么都没用默认当工具启动
     else:
         chaoxing = "need_login"
@@ -54,7 +64,7 @@ if __name__ == '__main__':
             password = input("请输入你的密码，按回车确认\n密码:")
         account = Account(username, password)
         # 实例化超星API
-        chaoxing = Chaoxing(account=account)
+        chaoxing = Chaoxing(driver=driver,account=account)
         # 检查当前登录状态，并检查账号密码
         _login_state = chaoxing.login()
         if not _login_state["status"]:
@@ -100,7 +110,7 @@ if __name__ == '__main__':
                     isAudio = False
                     try:
                         # 若调试启动，以chromedriver方式挂课
-                        if debug:
+                        if driver == default_d_function:
                             chaoxing.study_video_d(course, job, job_info, _speed=speed, _type="Video")
                         # 否则以协议挂课
                         else:
@@ -111,7 +121,7 @@ if __name__ == '__main__':
                     if isAudio:
                         try:
                             #同上，调试开启chromedriver启动
-                            if debug:
+                            if driver == default_d_function:
                                 chaoxing.study_video_d(course, job, job_info, _speed=speed, _type="Audio")
                             #同上上，调试关闭协议启动
                             else:
